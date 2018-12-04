@@ -1,3 +1,12 @@
+double QF(double *x, double *p)
+{
+   int z = (int) p[0];
+   double keVee = x[0];
+
+   if (z==11) return 0.1; // arXiv: 1706.07494
+   else if (z==53) return 0.05; // NIMA 773 (2015) 56
+   else return 0;
+}
 double Lindhard(double *x, double *p)
 {
    double z = p[0];
@@ -53,42 +62,43 @@ double Eff2PE(double keVee=0.1, double yield=30/*PE/keV*/, bool drawHist=false)
    }
 
    double rate = htrg.Integral()/h.GetEntries();
-   cout<<"trigger rate @ "<<keVee<<" keVee: "<<rate*100<<"%"<<endl;
+   //cout<<"trigger rate @ "<<keVee<<" keVee: "<<rate*100<<"%"<<endl;
    return rate;
 }
 
 void CsI3in20cm()
 {
-   TF1 *qfNa = new TF1("qfNa",Lindhard,0,10,2);
-   qfNa->SetParameters(11, 23);
-   TF1 *qfI = new TF1("qfI", Lindhard, 0, 5, 2);
-   qfI->SetParameters(53, 127);
-   const int n = 120;
-   double effee[n], effNa[n], effI[n], keV[n];
+   TF1 *qfNa = new TF1("qfNa", QF, 0, 100, 1);
+   qfNa->SetParameter(0, 11);
+   TF1 *qfCs = new TF1("qfCs", QF, 0, 100, 1);
+   qfCs->SetParameter(0, 53);
+   const int n = 520;
+   double effee[n], effNa[n], effCs[n], keV[n];
    for (int i=0; i<n; i++) {
       keV[i] = 0.01*(i+1);
-      effee[i] = Eff2PE(keV[i]);
-      effNa[i] = Eff2PE(keV[i]*qfNa->Eval(keV[i]));
-      effI[i] = Eff2PE(keV[i]*qfI->Eval(keV[i]));
+      effee[i] = Eff2PE(keV[i])*100;
+      effNa[i] = Eff2PE(keV[i]*qfNa->Eval(keV[i]))*100;
+      effCs[i] = Eff2PE(keV[i]*qfCs->Eval(keV[i]))*100;
    }
    TGraph *g = new TGraph(n,keV,effee);
    TGraph *gNa = new TGraph(n,keV,effNa);
-   TGraph *gI = new TGraph(n,keV,effI);
+   TGraph *gCs = new TGraph(n,keV,effCs);
    g->SetTitle("");
    g->GetXaxis()->SetTitle("Recoil energy [keV]");
-   g->GetYaxis()->SetTitle("Trigger efficiency (2 PE, 2 SiPM coincidence)");
+   g->GetYaxis()->SetTitle("Trigger efficiency (2-photon coincidence) [%]");
    g->Draw("ap");
    gNa->SetMarkerColor(kRed);
    gNa->Draw("p");
-   gI->SetMarkerColor(kBlue);
-   gI->Draw("p");
+   gCs->SetMarkerColor(kBlue);
+   gCs->Draw("p");
    gPad->SetGridx(); gPad->SetGridy();
 
    TLegend *l = new TLegend(0.7,0.2,0.88,0.4);
+   l->SetBorderSize(1);
    l->AddEntry(g,"Electron","p");
    l->AddEntry(gNa,"Na","p");
-   l->AddEntry(gI,"I","p");
-   l->Draw();
+   l->AddEntry(gCs,"Cs","p");
+   //l->Draw();
 
    gPad->Print("eff.png");
 }
