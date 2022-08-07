@@ -22,7 +22,7 @@ double Lindhard(double *x, double *p)
 const int nbin = 200; // max number of bins in the Poisson histogram
 const int nexp = 10000; // max number of experiments to be performed
 
-double Eff2PE(double keVee=0.1, double yield=30/*PE/keV*/, bool drawHist=false)
+double Eff2PE(double keVee=0.05, double yield=40/*PE/keV*/, bool drawHist=false)
 {
    double npe = yield*keVee;
 
@@ -92,6 +92,9 @@ void CsI3in20cm()
    gCs->SetMarkerColor(kBlue);
    gCs->Draw("p");
    gPad->SetGridx(); gPad->SetGridy();
+
+	 TF1 *f = new TF1("f", "100*(1-exp(-[0]*x-[1]*x*x-[2]*x*x*x))",0,5);
+	 gCs->Fit(f);
 
    TLegend *l = new TLegend(0.7,0.2,0.88,0.4);
    l->SetBorderSize(1);
