@@ -66,7 +66,7 @@ double Eff2PE(double keVee=0.05, double yield=40/*PE/keV*/, bool drawHist=false)
    return rate;
 }
 
-void CsI3in20cm()
+void drawNaIeff()
 {
    TF1 *qfNa = new TF1("qfNa", QF, 0, 100, 1);
    qfNa->SetParameter(0, 11);
