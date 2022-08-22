@@ -68,6 +68,8 @@ double Eff2PE(double keVee=0.05, double yield=40/*PE/keV*/, bool drawHist=false)
 
 void drawNaIeff()
 {
+   gStyle->SetOptFit(false);
+
    TF1 *qfNa = new TF1("qfNa", QF, 0, 100, 1);
    qfNa->SetParameter(0, 11);
    TF1 *qfCs = new TF1("qfCs", QF, 0, 100, 1);
@@ -93,7 +95,8 @@ void drawNaIeff()
    gCs->Draw("p");
    gPad->SetGridx(); gPad->SetGridy();
 
-	 TF1 *f = new TF1("f", "100*(1-exp(-[0]*x-[1]*x*x-[2]*x*x*x))",0,5);
+	 TF1 *f = new TF1("f", "100*(1-exp(-[0]*x-[1]*x*x))",0,5);
+	 gNa->Fit(f);
 	 gCs->Fit(f);
 
    TLegend *l = new TLegend(0.7,0.2,0.88,0.4);
@@ -103,5 +106,5 @@ void drawNaIeff()
    l->AddEntry(gCs,"Cs","p");
    //l->Draw();
 
-   gPad->Print("eff.png");
+   gPad->Print("effNaI.png");
 }
