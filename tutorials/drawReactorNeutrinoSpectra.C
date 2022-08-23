@@ -114,7 +114,7 @@ double dXSxdNxEff(double *x, double *parameter)
 	double Efission235=202; // MeV
 	double Rfission235=power/Efission235/Qe; // # of fissions per second
 	double mass=10000; // 10 kg
-	double Nnuclei=mass/(23+137)*NA; // # of Na or I
+	double Nnuclei=mass/(23+127)*NA; // # of Na or I
 	double distance=10000*mm;
 	double duration=365*24*3600;
 	double coefficient=Rfission235*duration*Nnuclei/4./pi/distance/distance;
