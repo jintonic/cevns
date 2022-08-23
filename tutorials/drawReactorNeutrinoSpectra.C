@@ -69,14 +69,15 @@ double dXSvsErfunc(double *x, double *parameter)
 	return dXS(Ev, Er, Z)*hbarc*hbarc/(1e-38*cm2/keV);
 }
 
-TF1 *fdXSvsEr = new TF1("fdXSvsEr", dXSvsErfunc, 0.1, 10, 2);
+TF1 *fdXSvsEr = new TF1("fdXSvsEr", dXSvsErfunc, 0.001, 100, 2); // Er in keV
 //______________________________________________________________________________
 //
 double dXSvsEvfunc(double *x, double *parameter)
 {
 	double Ev = x[0]; fdXSvsEr->SetParameter(0, Ev);
 	double Z = parameter[0]; fdXSvsEr->SetParameter(1, Z);
-	return fdXSvsEr->Integral(0.1, 10);
+	if (Z==11) return fdXSvsEr->Integral(0, 5/*keV*/); 
+	else return fdXSvsEr->Integral(0, 1.5/*keV*/); 
 }
 //______________________________________________________________________________
 //
@@ -86,7 +87,8 @@ double dXSxdNv(double *x, double *parameter)
 	double Ev = x[0]*MeV;
 	double Z = parameter[0]; fdXSvsEr->SetParameter(1, Z);
 	double dNdE = exp(1.39575-0.549369*Ev+0.00136642*Ev*Ev-0.00665779*Ev*Ev*Ev);
-	return fdXSvsEr->Integral(0.1, 10) * dNdE;
+	if (Z==11) return fdXSvsEr->Integral(0, 5/*keV*/) * dNdE; 
+	else return fdXSvsEr->Integral(0, 1.5/*keV*/) * dNdE; 
 }
 //______________________________________________________________________________
 //
@@ -96,10 +98,10 @@ double dXSxdNvsEv(double *x, double *parameter)
 	double Er = parameter[0]*keV;
 	double dNdE = exp(1.39575-0.549369*Ev+0.00136642*Ev*Ev-0.00665779*Ev*Ev*Ev);
 	unsigned short Z = static_cast<unsigned short>(parameter[1]);
-	return dXS(Ev, Er, Z)*hbarc*hbarc*dNdE;
+	return dXS(Ev, Er, Z)*hbarc*hbarc*dNdE; // cm2/MeV2
 }
 
-TF1 *fdXSxdNvsEv = new TF1("fdXSxdNvsEv", dXSxdNvsEv, 1, 10, 2);
+TF1 *fdXSxdNvsEv = new TF1("fdXSxdNvsEv", dXSxdNvsEv, 1, 10/*MeV*/, 2);
 //______________________________________________________________________________
 //
 double dXSxdNxEff(double *x, double *parameter)
@@ -111,12 +113,12 @@ double dXSxdNxEff(double *x, double *parameter)
 	double power=3400; // MW
 	double Efission235=202; // MeV
 	double Rfission235=power/Efission235/Qe; // # of fissions per second
-	double mass=10; // kg
-	double Nnuclei=mass/0.15*NA/2; // # of Na or I
+	double mass=10000; // 10 kg
+	double Nnuclei=mass/(23+137)*NA; // # of Na or I
 	double distance=10000*mm;
 	double duration=365*24*3600;
 	double coefficient=Rfission235*duration*Nnuclei/4./pi/distance/distance;
-	return fdXSxdNvsEv->Integral(1, 10) * eff * coefficient;
+	return fdXSxdNvsEv->Integral(0, 10) /*cm2/MeV*/ * keV * eff * coefficient;
 }
 //______________________________________________________________________________
 //
@@ -223,7 +225,7 @@ void drawReactorNeutrinoSpectra()
 	//____________________________________________________________________________
 	// draw CEvNS cross sections
 	TF2 *fdXS = new TF2("fdXS", dXSfunc,
-			0, 20, // neutrino energy range in MeV
+			0, 10, // neutrino energy range in MeV
 			0.1, 11, // nuclear recoil energy range in keV
 			1); // 1 parameter
 
@@ -238,7 +240,7 @@ void drawReactorNeutrinoSpectra()
 	fdXS->GetZaxis()->CenterTitle();
 	gPad->Print("dXS.png");
 
-	TF1 *fdXSvsEv = new TF1("fdXSvsEv", dXSvsEvfunc, 1*MeV, 8*MeV, 1);
+	TF1 *fdXSvsEv = new TF1("fdXSvsEv", dXSvsEvfunc, 0*MeV, 8*MeV, 1);
 	gPad->SetLeftMargin(0.11);
 	gPad->SetRightMargin(0.02);
 	fdXSvsEv->SetParameter(0,53);
@@ -258,19 +260,23 @@ void drawReactorNeutrinoSpectra()
 
 	//____________________________________________________________________________
 	// draw (XS x Ev spectra)
-	TF1 *fdXSxdNv = new TF1("fdXSxdNv", dXSxdNv, 0.1,8, 1);
-	fdXSxdNv->SetParameter(0,11);
-
+	TF1 *fdXSxdNv = new TF1("fdXSxdNv", dXSxdNv, 0,10, 1);
 	gPad->SetLogy(0);
 	fdXSxdNv->Draw();
 	gPad->SetTopMargin(0.06);
-	fdXSxdNv->SetTitle(";E_{#nu} [MeV];"
+	fdXSxdNv->SetTitle("I;E_{#nu} [MeV];"
 			"#sigma(E_{#nu}) #times dN_{#nu}/dE_{#nu} [arbitury unit]");
-	gPad->Print("dXSxdNv.png");
+	gPad->Print("dXSIxdNv.png");
+
+	fdXSxdNv->SetParameter(0,11);
+	fdXSxdNv->Draw();
+	fdXSxdNv->SetTitle("Na;E_{#nu} [MeV];"
+			"#sigma(E_{#nu}) #times dN_{#nu}/dE_{#nu} [arbitury unit]");
+	gPad->Print("dXSNaxdNv.png");
 
 	//____________________________________________________________________________
 	// draw (XS x Ev spectra x eff)
-	TF1 *fdXSxdNxEff = new TF1("fdXSxdNxEff", dXSxdNxEff, 0,5, 1);
+	TF1 *fdXSxdNxEff = new TF1("fdXSxdNxEff", dXSxdNxEff, 0, 5, 1);
 	fdXSxdNxEff->SetParameter(0,11);
 
 	gStyle->SetTitleY(1);
@@ -278,18 +284,18 @@ void drawReactorNeutrinoSpectra()
 	fdXSxdNxEff->Draw();
 	fdXSxdNxEff->GetYaxis()->SetTitleOffset(1.3);
 	//fdXSxdNxEff->GetYaxis()->SetRangeUser(0,21);
-	fdXSxdNxEff->SetTitle("3.4 GW, 10 kg NaI, 10 m from core;E_{Na recoil} [keV];"
-			"Events / year / MeV");
+	fdXSxdNxEff->SetTitle("3.4 GW, 10 kg NaI, 10 m from core;E^{Na}_{recoil} [keV];"
+			"Events / year / keV");
 	//fdXSxdNxEff->GetHistogram()->Draw("hist");
 	gPad->Print("dXSxdNxEffNa.png");
-	cout<<fdXSxdNxEff->Integral(0,5)<<endl;
+	cout<<fdXSxdNxEff->Integral(1.3,5)<<endl;
 
 	fdXSxdNxEff->SetParameter(0,53);
 	fdXSxdNxEff->Draw();
 	fdXSxdNxEff->GetYaxis()->SetTitleOffset(1.3);
-	fdXSxdNxEff->SetTitle("3.4 GW, 10 kg NaI, 10 m from core;E_{I recoil} [keV];"
-			"Events / year / MeV");
+	fdXSxdNxEff->SetTitle("3.4 GW, 10 kg NaI, 10 m from core;E^{I}_{recoil} [keV];"
+			"Events / year / keV");
 	//fdXSxdNxEff->GetHistogram()->Draw("hist");
 	gPad->Print("dXSxdNxEffI.png");
-	cout<<fdXSxdNxEff->Integral(0,5)<<endl;
+	cout<<fdXSxdNxEff->Integral(2.5,5)<<endl;
 }
