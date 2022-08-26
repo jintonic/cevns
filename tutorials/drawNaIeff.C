@@ -82,22 +82,22 @@ void drawNaIeff()
       effNa[i] = Eff2PE(keV[i]*qfNa->Eval(keV[i]))*100;
       effCs[i] = Eff2PE(keV[i]*qfCs->Eval(keV[i]))*100;
    }
-   TGraph *g = new TGraph(n,keV,effee);
+   TGraph *g = new TGraph(400,keV,effee);
    TGraph *gNa = new TGraph(n,keV,effNa);
    TGraph *gCs = new TGraph(n,keV,effCs);
-   g->SetTitle("");
-   g->GetXaxis()->SetTitle("Recoil energy [keV]");
-   g->GetYaxis()->SetTitle("Trigger efficiency (2-photon coincidence) [%]");
-   g->Draw("ap");
-   gNa->SetMarkerColor(kRed);
-   gNa->Draw("p");
+   gNa->SetTitle("");
+   gNa->GetXaxis()->SetTitle("Recoil energy [keV]");
+   gNa->GetYaxis()->SetTitle("Trigger efficiency (2-photon coincidence) [%]");
+   gNa->SetMarkerColor(kGreen);
+   gNa->Draw("ap");
+   g->Draw("p");
    gCs->SetMarkerColor(kBlue);
    gCs->Draw("p");
    gPad->SetGridx(); gPad->SetGridy();
 
 	 TF1 *f = new TF1("f", "100*(1-exp(-[0]*x-[1]*x*x))",0,5);
-	 gNa->Fit(f);
-	 gCs->Fit(f);
+	 gNa->Fit(f, "R");
+	 gCs->Fit(f, "R");
 
    TLegend *l = new TLegend(0.7,0.2,0.88,0.4);
    l->SetBorderSize(1);
