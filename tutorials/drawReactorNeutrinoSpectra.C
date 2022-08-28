@@ -14,16 +14,32 @@ static const double Qe = 1.602176487e-19; // electron charge in coulomb
 static const double NA = 6.02214179e+23; // Avogadro constant
 static const double hbarc= 197.327e-12*MeV*mm;
 //______________________________________________________________________________
+// F(q^2)
+double F(double *x, double *parameter)
+{
+	double Er=x[0]*keV;
+ 	if (Er==0) return 1; // no momentum transfer
+ 	double M=parameter[0]; // GeV
+ 	double rn=parameter[1]; // fermi
+	double q2=2*M*Er;
+	double q = sqrt(q2);
+	double r0= sqrt(rn*rn-5*fermi*fermi);
+	double qr0 = q*r0/hbarc; // convert r0 from mm to natural unit MeV^-1
+	double j1= (sin(qr0)-qr0*cos(qr0))/(qr0)/(qr0); // Levin & Smith, 1996
+	double s2= fermi/hbarc * fermi/hbarc;
+	return 3.*j1/qr0*exp(-q2*s2/2.);
+}
+//______________________________________________________________________________
 // CEvNS differential cross section
 double dXS(double Ev, double Er, unsigned short Z=53)
 {
-	unsigned short N = 74; // neutron number of the target nucleus
+	unsigned short N = 74; // neutron number of I
 	double M = 118.1846*GeV; // mass of I
 	double R = 4.7500*fermi; // radius of I
 
-	if (Z==11) {
+	if (Z==11) { // Na
 		N = 12;
-		M = 21.4094*GeV; // mass of Na
+		M = 21.4094*GeV;
 		R = 2.9936*fermi;
 	}
 
@@ -35,7 +51,7 @@ double dXS(double Ev, double Er, unsigned short Z=53)
 	double qw = (N-Z) + 4*sin2thetaw * Z;
 
 	double f;
- 	if (Er==0) {
+	if (Er==0) {
 		f=1; // no momentum transfer
 	} else {
 		double q2 = 2*M*Er;
@@ -47,7 +63,8 @@ double dXS(double Ev, double Er, unsigned short Z=53)
 		f = 3.*j1/qr0*exp(-q2*s2/2.);
 	}
 
-	return GF*GF*M/8/pi * (1 + (1-Er/Ev)*(1-Er/Ev) - M*Er/Ev/Ev) *qw*qw*f*f;
+	double xs = GF*GF*M/8/pi * (1 + (1-Er/Ev)*(1-Er/Ev) - M*Er/Ev/Ev) *qw*qw*f*f;
+	return xs*hbarc*hbarc; // 1/E^3 -> L^2/E
 }
 //______________________________________________________________________________
 //
@@ -55,40 +72,39 @@ double dXSfunc(double *x, double *parameter)
 {
 	double Ev = x[0]*MeV; // neutrino energy
 	double Er = x[1]*keV; // nuclear recoil energy
- 	// proton number of the target nucleus
+	// proton number of the target nucleus
 	unsigned short Z = static_cast<unsigned short>(parameter[0]);
-	return dXS(Ev, Er, Z)*hbarc*hbarc/(1e-40*cm2/keV);
+	return dXS(Ev, Er, Z)/(cm2/keV);
 }
 //______________________________________________________________________________
 //
-double dXSvsErfunc(double *x, double *parameter)
+double dXSvsEr(double *x, double *parameter)
 {
 	double Er = x[0]*keV;
 	double Ev = parameter[0]*MeV;
 	unsigned short Z = static_cast<unsigned short>(parameter[1]);
-	return dXS(Ev, Er, Z)*hbarc*hbarc/(1e-38*cm2/keV);
+	return dXS(Ev, Er, Z)/(1e-38*cm2/keV);
 }
 
-TF1 *fdXSvsEr = new TF1("fdXSvsEr", dXSvsErfunc, 0.001, 100, 2); // Er in keV
+TF1 *fdXSvsEr = new TF1("fdXSvsEr", dXSvsEr, 0, 10, 2); // Er in keV
 //______________________________________________________________________________
 //
-double dXSvsEvfunc(double *x, double *parameter)
+double dXSvsEv(double *x, double *parameter)
 {
 	double Ev = x[0]; fdXSvsEr->SetParameter(0, Ev);
 	double Z = parameter[0]; fdXSvsEr->SetParameter(1, Z);
-	if (Z==11) return fdXSvsEr->Integral(0, 5/*keV*/); 
-	else return fdXSvsEr->Integral(0, 1.5/*keV*/); 
+	if (Z==11) return fdXSvsEr->Integral(0, 2*Ev*Ev/21); 
+	else return fdXSvsEr->Integral(0, 2*Ev*Ev/118); 
 }
+//______________________________________________________________________________
+//
+TF1 *fdNdE = new TF1("fdNdE", "exp(1.39575-0.549369*x+0.00136642*x*x"
+			"-0.00665779*x*x*x)", 0,10);
 //______________________________________________________________________________
 //
 double dXSxdNv(double *x, double *parameter)
 {
- 	fdXSvsEr->SetParameter(0, x[0]);
-	double Ev = x[0]*MeV;
-	double Z = parameter[0]; fdXSvsEr->SetParameter(1, Z);
-	double dNdE = exp(1.39575-0.549369*Ev+0.00136642*Ev*Ev-0.00665779*Ev*Ev*Ev);
-	if (Z==11) return fdXSvsEr->Integral(0, 5/*keV*/) * dNdE; 
-	else return fdXSvsEr->Integral(0, 1.5/*keV*/) * dNdE; 
+	return dXSvsEv(x,parameter)*fdNdE->Eval(x[0])/MeV;
 }
 //______________________________________________________________________________
 //
@@ -96,20 +112,23 @@ double dXSxdNvsEv(double *x, double *parameter)
 {
 	double Ev = x[0]*MeV;
 	double Er = parameter[0]*keV;
-	double dNdE = exp(1.39575-0.549369*Ev+0.00136642*Ev*Ev-0.00665779*Ev*Ev*Ev);
 	unsigned short Z = static_cast<unsigned short>(parameter[1]);
-	return dXS(Ev, Er, Z)*hbarc*hbarc*dNdE; // cm2/MeV2
+	return dXS(Ev, Er, Z)*fdNdE->Eval(x[0]); // L2/E * 1/E
 }
 
-TF1 *fdXSxdNvsEv = new TF1("fdXSxdNvsEv", dXSxdNvsEv, 1, 10/*MeV*/, 2);
+TF1 *fdXSxdNvsEv = new TF1("fdXSxdNvsEv", dXSxdNvsEv, 0, 10/*MeV*/, 2);
+//______________________________________________________________________________
+//
+TF1 *fEffI = new TF1("fEffI", "1-exp(-0.293746*x-0.1299*x*x)",0,10);
+TF1 *fEffNa = new TF1("fEffNa", "1-exp(-0.596213*x-0.510011*x*x)",0,10);
 //______________________________________________________________________________
 //
 double dXSxdNxEff(double *x, double *parameter)
 {
 	fdXSxdNvsEv->SetParameter(0, x[0]); // x[0] = Er in keV
 	double Z = parameter[0]; fdXSxdNvsEv->SetParameter(1, Z);
-	double eff = 1-exp(-0.293746*x[0]-0.1299*x[0]*x[0]);
-	if (Z==11) eff = 1-exp(-0.596213*x[0]-0.510011*x[0]*x[0]);
+	double eff = fEffI->Eval(x[0]);
+	if (Z==11) eff = fEffNa->Eval(x[0]);
 	double power=3400; // MW
 	double Efission235=202; // MeV
 	double Rfission235=power/Efission235/Qe; // # of fissions per second
@@ -118,8 +137,27 @@ double dXSxdNxEff(double *x, double *parameter)
 	double distance=10000*mm;
 	double duration=365*24*3600;
 	double coefficient=Rfission235*duration*Nnuclei/4./pi/distance/distance;
-	return fdXSxdNvsEv->Integral(0, 10) /*cm2/MeV*/ * keV * eff * coefficient;
+	return fdXSxdNvsEv->Integral(0, 10) /*L2/E*/ * keV * eff * coefficient;
 }
+//______________________________________________________________________________
+//
+double dXSxdNdE(double *x, double *parameter)
+{
+	return dXSfunc(x,parameter) * fdNdE->Eval(x[0]);
+}
+//______________________________________________________________________________
+//
+double dXSxdNdExEff(double *x, double *parameter)
+{
+	if (parameter[0]==11) return dXSxdNdE(x,parameter) * fEffNa->Eval(x[1]);
+	else return dXSxdNdE(x,parameter) * fEffI->Eval(x[1]);
+}
+//______________________________________________________________________________
+//
+TF2 *fdXSxdNdExEff = new TF2("fdXSxdNdE", dXSxdNdExEff,
+			0, 10, // neutrino energy range in MeV
+			0, 10, // nuclear recoil energy range in keV
+			1); // 1 parameter
 //______________________________________________________________________________
 //
 void drawReactorNeutrinoSpectra()
@@ -128,7 +166,7 @@ void drawReactorNeutrinoSpectra()
 	gROOT->SetStyle("Plain"); // pick up an existing style to modify
 	gStyle->SetMarkerStyle(kFullDotLarge);
 	gStyle->SetMarkerSize(0.8);
-	gStyle->SetLegendBorderSize(0);
+	gStyle->SetLegendBorderSize(1);
 	gStyle->SetLegendFont(132);
 	gStyle->SetTitleBorderSize(0);
 	gStyle->SetOptStat(0);
@@ -143,6 +181,7 @@ void drawReactorNeutrinoSpectra()
 	gStyle->SetLabelSize(0.05,"XYZ");
 	gStyle->SetTitleSize(0.05,"XYZ");
 	gStyle->SetTitleOffset(1.0,"Y");
+	gStyle->SetTitleOffset(1.2,"Z");
 	gStyle->SetPadRightMargin(0.01);
 	gStyle->SetPadLeftMargin(0.1);
 	gStyle->SetPadTopMargin(0.01);
@@ -150,6 +189,26 @@ void drawReactorNeutrinoSpectra()
 	gStyle->SetTitleAlign(23);
 	gStyle->SetTitleX(0.52);
 	gStyle->SetTitleY(0.96);
+
+	//____________________________________________________________________________
+	// draw F(q^2)
+	TF1 *fF = new TF1("fF", F, 0, 5 /* keV */, 2);
+	fF->SetParameter(0,118.1846*GeV);
+	fF->SetParameter(1,4.7500*fermi);
+	TF1 *fI = fF->DrawCopy();
+	fI->SetTitle(";E_{recoil};F(q^{2})");
+	fF->SetParameter(0,21.4094*GeV);
+	fF->SetParameter(1,2.9936*fermi);
+	fF->SetLineColor(kRed);
+	fF->Draw("same");
+	
+	TLegend *l1 = new TLegend(0.75, 0.6, 0.9, 0.78);
+	l1->AddEntry(fF, "Na", "l");
+	l1->AddEntry(fI, "I", "l");
+	l1->Draw();
+
+	gPad->SetGridx(); gPad->SetGridy();
+	gPad->Print("F.png");
 
 	//____________________________________________________________________________
 	// draw reactor neutrino spectra normalized per fission
@@ -226,53 +285,71 @@ void drawReactorNeutrinoSpectra()
 	// draw CEvNS cross sections
 	TF2 *fdXS = new TF2("fdXS", dXSfunc,
 			0, 10, // neutrino energy range in MeV
-			0.1, 11, // nuclear recoil energy range in keV
+			0, 10, // nuclear recoil energy range in keV
 			1); // 1 parameter
 
-	gPad->SetGridx(); gPad->SetGridy();
- 	gPad->SetLogz();
-	gPad->SetRightMargin(0.16);
+	gPad->SetLogz();
+	gPad->SetRightMargin(0.17);
+	gPad->SetTopMargin(0.02);
 
 	fdXS->SetParameter(0,11);
 	fdXS->Draw("colz");
-	fdXS->SetTitle(";E_{#nu} [MeV]; E_{recoil} [keV];"
-		 "dN_{#nu}/dE_{recoil} [10^{-40} cm^{2}/keV]");
-	fdXS->GetZaxis()->CenterTitle();
+	fdXS->SetTitle(";E_{#nu} [MeV]; E_{r} [keV];"
+			"d#sigma/dE_{r} [cm^{2}/keV]");
 	gPad->Print("dXS.png");
 
-	TF1 *fdXSvsEv = new TF1("fdXSvsEv", dXSvsEvfunc, 0*MeV, 8*MeV, 1);
+	TF2 *fdXSxdNdE = new TF2("fdXSxdNdE", dXSxdNdE,
+			0, 10, // neutrino energy range in MeV
+			0, 10, // nuclear recoil energy range in keV
+			1); // 1 parameter
+	fdXSxdNdE->SetParameter(0,11);
+	fdXSxdNdE->Draw("colz");
+	fdXSxdNdE->SetTitle(";E_{#nu} [MeV];E_{r} [keV];"
+			"d#sigma/dE_{r} [cm^{2}/keV] #times dN_{#nu}/dE_{#nu} [1/MeV]");
+	gPad->Print("dXSxdNdE.png");
+
+	fdXSxdNdExEff->SetParameter(0,11);
+	fdXSxdNdExEff->Draw("colz");
+	fdXSxdNdExEff->SetTitle(";E_{#nu} [MeV];E_{r} [keV];"
+			"d#sigma/dE_{r} [cm^{2}/keV] #times dN_{#nu}/dE_{#nu} [1/MeV] #times #epsilon");
+	gPad->Print("dXSxdNdExEff.png");
+
+	gPad->Clear();
 	gPad->SetLeftMargin(0.11);
 	gPad->SetRightMargin(0.02);
+
+	TF1 *fdXSvsEv = new TF1("fdXSvsEv", dXSvsEv, 0, 8 /* MeV */, 1);
 	fdXSvsEv->SetParameter(0,53);
-	fdXSvsEv->Draw();
-	fdXSvsEv->GetYaxis()->SetRangeUser(5e-6, 5e-1);
-	fdXSvsEv->SetTitle("I; E_{#nu} [MeV];"
-		 "#sigma(E_{#nu}) [10^{-38} cm^{2}]");
-	fdXSvsEv->GetYaxis()->SetTitleOffset(1.1);
-	gPad->Print("dXSvsEvI.png");
+	TF1 *fc = fdXSvsEv->DrawCopy();
+	fc->GetYaxis()->SetRangeUser(5e-6, 5e-1);
+	fc->SetTitle(";E_{#nu} [MeV];#sigma(E_{#nu}) [10^{-38} cm^{2}]");
+	fc->GetYaxis()->SetTitleOffset(1.1);
+
 	fdXSvsEv->SetParameter(0,11);
-	fdXSvsEv->Draw();
-	fdXSvsEv->GetYaxis()->SetRangeUser(5e-6, 5e-1);
-	fdXSvsEv->SetTitle("Na; E_{#nu} [MeV];"
-		 "#sigma(E_{#nu}) [10^{-38} cm^{2}]");
-	fdXSvsEv->GetYaxis()->SetTitleOffset(1.1);
-	gPad->Print("dXSvsEvNa.png");
+	fdXSvsEv->SetLineColor(kRed);
+	fdXSvsEv->Draw("same");
+
+	l1->Draw();
+	gPad->Print("dXSvsEv.png");
 
 	//____________________________________________________________________________
 	// draw (XS x Ev spectra)
-	TF1 *fdXSxdNv = new TF1("fdXSxdNv", dXSxdNv, 0,10, 1);
+	gPad->Clear();
 	gPad->SetLogy(0);
-	fdXSxdNv->Draw();
 	gPad->SetTopMargin(0.06);
-	fdXSxdNv->SetTitle("I;E_{#nu} [MeV];"
+
+	TF1 *fdXSxdNv = new TF1("fdXSxdNv", dXSxdNv, 0,10, 1);
+	TF1 *fco = fdXSxdNv->DrawCopy();
+	fco->SetTitle(";E_{#nu} [MeV];"
 			"#sigma(E_{#nu}) #times dN_{#nu}/dE_{#nu} [arbitury unit]");
-	gPad->Print("dXSIxdNv.png");
+	fco->GetYaxis()->SetTitleOffset(1.1);
 
 	fdXSxdNv->SetParameter(0,11);
-	fdXSxdNv->Draw();
-	fdXSxdNv->SetTitle("Na;E_{#nu} [MeV];"
-			"#sigma(E_{#nu}) #times dN_{#nu}/dE_{#nu} [arbitury unit]");
-	gPad->Print("dXSNaxdNv.png");
+	fdXSxdNv->SetLineColor(kRed);
+	fdXSxdNv->Draw("same");
+
+	l1->Draw();
+	gPad->Print("dXSxdNv.png");
 
 	//____________________________________________________________________________
 	// draw (XS x Ev spectra x eff)
@@ -298,4 +375,20 @@ void drawReactorNeutrinoSpectra()
 	//fdXSxdNxEff->GetHistogram()->Draw("hist");
 	gPad->Print("dXSxdNxEffI.png");
 	cout<<fdXSxdNxEff->Integral(2.5,5)<<endl;
+
+	double power=3400; // MW
+	double Efission235=202; // MeV
+	double Rfission235=power/Efission235/Qe; // # of fissions per second
+	double mass=10000; // 10 kg
+	double Nnuclei=mass/(23+127)*NA; // # of Na or I
+	double distance=10000*mm/cm;
+	double duration=365*24*3600;
+	double coefficient=Rfission235*duration*Nnuclei/4./pi/distance/distance;
+
+	fdXSxdNdExEff->SetParameter(0,11);
+	cout<<"Rfission235: "<<Rfission235<<endl;
+	cout<<"N_Na: "<<Nnuclei<<endl;
+	cout<<"365*24*3600: "<<duration<<endl;
+	cout<<"1/4/pi/1000/1000 cm^-2: "<<1/4./pi/distance/distance<<endl;
+	cout<<"N of CEvNS on Na: "<<fdXSxdNdExEff->Integral(3.5,9, 1,6) * coefficient<<endl;
 }
