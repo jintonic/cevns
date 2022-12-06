@@ -4,7 +4,7 @@ double QF(double *x, double *p)
    double keVee = x[0];
 
    if (z==11) return 0.1; // arXiv: 1706.07494
-   else if (z==53) return 0.05; // NIMA 773 (2015) 56
+   else if (z==53) return 0.15; // NIMA 773 (2015) 56
    else return 0;
 }
 double Lindhard(double *x, double *p)
@@ -22,7 +22,7 @@ double Lindhard(double *x, double *p)
 const int nbin = 200; // max number of bins in the Poisson histogram
 const int nexp = 10000; // max number of experiments to be performed
 
-double Eff2PE(double keVee=0.05, double yield=40/*PE/keV*/, bool drawHist=false)
+double Eff2PE(double keVee=0.05, double yield=50/*PE/keV*/, bool drawHist=false)
 {
    double npe = yield*keVee;
 
@@ -82,12 +82,12 @@ void drawNaIeff()
       effNa[i] = Eff2PE(keV[i]*qfNa->Eval(keV[i]))*100;
       effCs[i] = Eff2PE(keV[i]*qfCs->Eval(keV[i]))*100;
    }
-   TGraph *g = new TGraph(400,keV,effee);
+   TGraph *g = new TGraph(230,keV,effee);
    TGraph *gNa = new TGraph(n,keV,effNa);
    TGraph *gCs = new TGraph(n,keV,effCs);
    gNa->SetTitle("");
    gNa->GetXaxis()->SetTitle("Recoil energy [keV]");
-   gNa->GetYaxis()->SetTitle("Trigger efficiency (2-photon coincidence) [%]");
+   gNa->GetYaxis()->SetTitle("Trigger efficiency [%]");
    gNa->SetMarkerColor(kGreen);
    gNa->Draw("ap");
    g->Draw("p");
